@@ -1,29 +1,3 @@
----
-title: "Homework 2"
-output:
-  html_document:
-    df_print: paged
-  pdf_document: default
----
-
-**Rules**:
-
-1. **The submission deadline is 14.11.2019, 23:59:59**. Your homework should be submitted to `dse2019hsehw2@gmail.com`. **No late submissions will be accepted**;
-
-2. Every group should submit one `.Rmd` file (you should use this file to write up your homework). Submitted file should be named: `vjacisens_ntoropov.Rmd` for the file submitted by Vitalijs Jascisens and Nikita Toropov;
-
-3. **No plagiarism**: all sources (both offline and online have to be acknowledged). Cheating on any part of the assignment results in a **grade of zero** for the entire assignment;
-
-4. All problems are equally weighted;
-
-5. We will not be checking your code. All problems have precise answers, hence only the correctness of the answer will be graded.
-
-**Name and Surname**:
-
-1. First student (academic number);
-
-2. Second student (academic number).
-
 # Problem 1: Parsing HTML (This is a medium difficulty problem)
 
 **Description of the data:**
