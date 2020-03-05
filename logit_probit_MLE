@@ -1,0 +1,350 @@
+We start by analyzing the multinomial logit model with three choices. Utility functions are given by following expressions:
+
+$$
+u_{i1} =\epsilon_{i1} \\
+u_{i2} =\xi_2 + \alpha_2*school_i + \beta_2*age_i+\gamma_2*F_i+\epsilon_{i2} \\
+u_{i3} =\xi_3 + \alpha_3*school_i + \beta_3*age_i+\gamma_3*F_i+\epsilon_{i3} \\
+$$
+Where:
+
+  * $(\epsilon_{i1},\epsilon_{i2},\epsilon_{i3})$ are type 1 extreme value distributed error terms;
+  
+  * $F_i$: equals 1 if a peson $i$ is a female and 0 otherwise.
+
+The respective choice probabilities are given by following expressions:
+$$
+P(choice_2) =\frac{exp(\xi_2+\alpha_2*school_i + \beta_2*age_i+\gamma_2*F_i)}{1+exp(\xi_2+\alpha_2*school_i + \beta_2*age_i+\gamma_2*F_i)+exp(\xi_3+\alpha_3*school_i + \beta_3*age_i+\gamma_3*F_i)} \\
+P(choice_3) =\frac{exp(\xi_3+\alpha_3*school_i + \beta_3*age_i+\gamma_3*F_i)}{1+exp(\xi_2+\alpha_2*school_i + \beta_2*age_i+\gamma_2*F_i)+exp(\xi_3+\alpha_3*school_i + \beta_3*age_i+\gamma_3*F_i)} \\
+P(choice_1) = 1 - P(choice_2) - P(choice_3)
+$$
+
+Dataset: `data_1.csv` contains following variables:
+
+  * `choice`;
+  * `age`;
+  * `school`;
+  * `gender`: `1` if a person $i$ is a female and `0` otherwise.
+
+
+**Questions**:
+
+  1. Use function `multinom` from `nnet` package to estimate the above model;
+  
+```{r}
+#Your solution comes here
+library(optimx)
+library(data.table)
+library(nnet)
+da<-fread('data_1.csv')
+model<-multinom(da$choice~da$school+da$age+da$gender, data=da)
+summary(model)
+```
+  
+  2. Next, estimate the above model using maximum likelihood estimation (i.e., you are required to write the likelihood function and then obtain parameters by maximizing the likelihood function);
+We use log-likelyhood for maximization
+$$P(choice_2)=\frac{exp(\xi_2+\alpha_2*school+\beta_2*age+\gamma_2*F)}{1+exp(\xi_2+\alpha_2*school+\beta_2*age+\gamma_2*F)+exp(\xi_3+\alpha_3*school+\beta_3*age+\gamma_3*F)}$$
+$$P(choice_3)=\frac{exp(\xi_3+\alpha_3*school+\beta_3*age+\gamma_3*F)}{1+exp(\xi_2+\alpha_2*school+\beta_2*age+\gamma_2*F)+exp(\xi_3+\alpha_3*school+\beta_3*age+\gamma_3*F)}
+$$
+$$P(choice_1)=1-P(choice_2)-P(choice_3)$$
+Then we use MLE:
+$$\prod_{i=1}^n P(choice_2)^{(choice==2)}*P(choice_3)^{(choice==3)}*P(choice_1)^{(choice==1)}$$
+Taking the log:
+$$argmax \prod_{i=1}^n (choice==2)\log({P(choice_2)})+(choice==1)\log({P(choice_1)})+(choice==3)\log({P(choice_3)})$$
+```{r}
+#Your solution comes here 
+
+func<-function(x){
+  a<-x[1]
+  b<-x[2]
+  g<-x[3]
+  si<-x[4]
+  a2<-x[5]
+  b2<-x[6]
+  g2<-x[7]
+  si2<-x[8]
+  u2<-exp(si+a*da$school+b*da$age+g*da$gender)/(1+exp(si+a*da$school+b*da$age+g*da$gender)+exp(si2+a2*da$school+b2*da$age+g2*da$gender))
+  u3<-exp(si2+a2*da$school+b2*da$age+g2*da$gender)/(1+exp(si+a*da$school+b*da$age+g*da$gender)+exp(si2+a2*da$school+b2*da$age+g2*da$gender))
+  u1<-1-u2-u3
+  t<-(da$choice==1)*log(u1)+(da$choice==2)*log(u2)+(da$choice==3)*log(u3)
+  -sum(t)
+}
+
+re_mle<-optimx(c(0,0,0,0,0,0,0,0),func,method='BFGS')
+re_mle 
+
+
+```
+
+  3. Via bootstrap obtain standard errors of all parameters you estimated in the second question. How do standard errors you obtained via bootstrap compare to those you obtained in question 1;
+  
+We should use non-parametric bootstrap here since we have basically 3 equations, each with its own error term. This means that $\epsilon_i$ are not i.i.d., which is required by the residual bootstrap. Also, we do not know if $\epsilon_i$ are independent of regressors.
+Standard errors estimated using bootstrap are a little bit larger than in question 1.
+
+```{r}
+#Your solution comes here 
+sampling<-function(n,x){
+  s<-sample(1:dim(x)[1],dim(x)[1],replace = T)
+  x[s]
+}
+samples<-lapply(1:100,sampling,x=da)
+estim<-function(y){
+  m<-multinom(choice~.,data=y)
+  summary(m)$coefficients
+} 
+b_est<-sapply(samples,estim)
+
+se_si1<-sqrt(sum((b_est[1,]-mean(b_est[1,]))^2)/99)
+se_g1<-sqrt(sum((b_est[7,]-mean(b_est[7,]))^2)/99)
+se_b1<-sqrt(sum((b_est[3,]-mean(b_est[3,]))^2)/99)
+se_b2<-sqrt(sum((b_est[4,]-mean(b_est[4,]))^2)/99)
+se_a1<-sqrt(sum((b_est[5,]-mean(b_est[5,]))^2)/99) 
+se_a2<-sqrt(sum((b_est[6,]-mean(b_est[6,]))^2)/99)
+se_si2<-sqrt(sum((b_est[2,]-mean(b_est[2,]))^2)/99)
+se_g2<-sqrt(sum((b_est[8,]-mean(b_est[8,]))^2)/99)
+seest<-transpose(data.table(c(se_si1,se_si2,se_a1,se_a2,se_b1,se_b2,se_g1,se_g2)))
+colnames(seest)<-c('se_intercept1','se_intercept2','se_alpha1','se_alpha2','se_beta1','se_beta2','se_gamma1','se_gamma2')
+seest
+```
+  
+  4. Calculate:
+  
+$$
+P(choice_3|school_i = \bar{school}_i, age_i=\bar{age}_i, gender=F) - P(choice_2|school_i = \bar{school}_i, age_i=\bar{age}_i, gender=F)
+$$
+Where: 
+
+  * $\bar{age}_i$ is a mean age in the sample;
+  
+  * $\bar{school}_i$ is a mean schooling level in the sample.
+  
+```{r}
+#Your solution comes here 
+sch_m<-mean(da$school)
+age_m<-mean(da$age)
+z<-summary(model)$coefficients
+p2<-exp(z[1,1]+z[1,2]*sch_m+z[1,3]*age_m+z[1,4]*1)/(1+exp(z[1,1]+z[1,2]*sch_m+z[1,3]*age_m+z[1,4]*1)+exp(z[2,1]+z[2,2]*sch_m+z[2,3]*age_m+z[2,4]*1))
+p3<-exp(z[2,1]+z[2,2]*sch_m+z[2,3]*age_m+z[2,4]*1)/(1+exp(z[1,1]+z[1,2]*sch_m+z[1,3]*age_m+z[1,4]*1)+exp(z[2,1]+z[2,2]*sch_m+z[2,3]*age_m+z[2,4]*1))
+diff<-p3-p2
+diff
+```
+
+5. Is the difference in probabilities you obtained in question 4 statistically significant at 5% significance level?
+  
+```{r}
+#Your solution comes here  
+```
+
+
+# Problem 2: Probit Model (20 points)
+  
+In this problem you learn what is a probit model. You first learn how to estimate it via built in `R` functions and then how to use maximum likelihood estimation to obtain estimates manually.
+
+It is easy to motivate the probit model via the following thought experiment. Suppose individual $i$ works (i.e., $y_i=1$) if his reservation wage ($w_i$) is larger than 0. Unfortunately, we do not observe the reservation wage. What we can then do is to parametrize the reservation wage as a function of some characteristics (in this case we will use age and gender). Let's assume that that the reservation wage is given by the following expression:
+
+$$
+w_i = \beta_0+\beta_1*age_i+\beta_2F_i+u_i\\
+u_i \sim N(0,1)
+$$
+Where $F_i=1$ if a person $i$ is a female and 0 otherwise. Given the above display it is easy to derive following choice probabilities:
+
+$$
+P(y_i =1|age_i,F_i) = P(w_i>0) \\
+= P(\beta_0+\beta_1*age_i+\beta_2F_i+u_i>0) \\
+= P(\beta_0+\beta_1*age_i+\beta_2F_i>-u_i) \\
+ = P(u_i>-\beta_0 -\beta_1age_i-\beta_2F_i) = 1-\Phi(-\beta_0 -\beta_1age_i-\beta_2F_i)
+$$
+Where $\Phi(\cdot)$: c.d.f. of a N(0,1) distributed random variable.
+
+Dataset: `data_2.csv` contains following variables:
+
+  * `y`: 1 if a person $i$ works and 0 otherwise;
+  * `age`;
+  * `school`;
+  * `gender`: `1` if a gender of a person $i$ is female and `0` otherwise.
+
+**Questions**:
+
+  1. Use function `glm` to obtain estimates of $\beta_0$, $\beta_1$ and $\beta_2$;
+  
+```{r}
+#Your solution comes here  
+dat<-fread('data_2.csv')
+w<-dat$y
+age<-dat$age
+fem<-dat$gender
+glm(w~age+fem, family = binomial(link='probit'), data = dat)$coefficients #https://www.econometrics-with-r.org/11-2-palr.html
+```
+  
+  2. Do "manual" maximum likelihood estimation: i.e., first write a likelihood function and then maximize it to obtain estimates of $\beta_0$, $\beta_1$ and $\beta_2$.
+We have P($y_i=1 \mid age_i,F_i$)=1 - $\phi(-\beta_0-\beta_1*age-\beta_2*F_i)$.
+Then P($y_i=0 \mid age_i,F_i$)=$\phi(-\beta_0-\beta_1*age-\beta_2*F_i)$
+Using MLE we have:
+$$\prod_{i=1}^n  P(y_i=0 \mid age_i,F_i)^{y_i==0}*P(y_i=1 \mid age_i,F_i)^{y_i==1}=(\phi(-\beta_0-\beta_1*age-\beta_2*F_i))^{y_i==0}*
+(1 - \phi(-\beta_0-\beta_1*age-\beta_2*F_i))^{y_i==1}
+$$
+Taking log we have:
+argmax $\prod_{i=1}^n (y_i==0)*\log({(\phi(-\beta_0-\beta_1*age-\beta_2*F_i))})+(y_i==1)*\log((1 - \phi(-\beta_0-\beta_1*age-\beta_2*F_i)))$
+
+```{r}
+#Your solution comes here  
+f<-function(x){
+  b0<-x[1]
+  b1<-x[2]
+  b2<-x[3]
+  v<-1-pnorm(-b0-b1*age-b2*fem)
+  s<-1-v
+  re<-(dat$y==1)*log(v)+(dat$y==0)*log(s)
+  -sum(re)
+}
+res<-optimx(c(0,0,0),f,method='BFGS')
+res[,1:3]
+```
+
+# Problem 3: Data Exercise (40 points)
+
+This problem comes from the book by Cosma Chalizi: Advanced Data Analysis from an Elementary Point of View.
+
+Dataset: `data_3.csv` contains following variables:
+
+  * `country`: the country name;
+
+  * `year`: the year;
+
+  * `start`: an indicator for whether a civil war began during that period, the code of
+`NA` means an on-going civil war, while 0 denotes continuing peace;
+
+  * `exports`: exports, really a measure of how dependent the country’s economy is on commodity exports;
+
+  * `schooling`: secondary school enrollment rate for males, as a percentage;
+
+  * `growth`: annual growth rate in GDP;
+
+  * `concentration`: an index of the geographic concentration of the country’s population (which
+would be 1 if the entire population lives in one city, and 0 if it is evenly spread
+across the territory);
+
+  * `peace`: the number of months since the country’s last war or the end of World War
+II, whichever is more recent;
+
+  * `lnpop`: the natural logarithm of the country’s population;
+
+  * `fractionalization`: an index of social “fractionalization”, which tries to measure how much the
+country is divided along ethnic and/or religious lines;
+
+  * `dominance`: an index of ethnic dominance, which tries to measure how much one ethnic
+group runs affairs in the country.
+
+**Questions**:
+
+1. Fit a logistic regression for the start of civil war on all other variables except country and year; include a quadratic term for exports. Report the coefficients and their standard errors, together with R’s p-values. Which ones does R say are significant at the 5% level?
+
+!!!Here I omit observations where start is NA (as stated in email) and where dominance is NA, since it is coded 0 or 1, and so I assume for NAs we do not any data.
+
+```{r}
+#Your solution comes here
+file<-fread('data_3.csv')
+file<-file[is.na(file$start)==F,]
+model1<-glm(start~exports+I(exports^2)+schooling+growth+peace+concentration+lnpop+fractionalization+dominance, data=file, family='binomial')
+summary(model1)$coefficients[,c('Estimate','Std. Error','Pr(>|z|)')]
+  
+```
+We claim the variable is significant if p-value<5%. We can see that the intercept,exports, exports^2,schooling,growth,peace,concentration,lnpop and fractionalization are significant (essentially, all except dominance)
+
+2. All parts of this question refer to the logistic regression
+model you just fit:
+
++ 2.1 What is the model’s predicted probability for a civil war in India in the period beginning 1975? What probability would it predict for a country just like India in 1975, except that its male secondary school enrollment rate was 30 points higher? What probability would it predict for a country just like India in 1975, except that exports were 0.1 higher?
+  
+```{r}
+#Your solution comes here
+obs<-file[(file$country=='India')&(file$year==1975),]
+obs<-obs[,3:length(obs)]
+pred1<-predict(model1,obs, type='response') #https://www.r-tutor.com/elementary-statistics/logistic-regression/estimated-logistic-regression-equation
+pred1
+
+ob<-obs
+ob$schooling<-ob$schooling+30
+pred2<-predict(model1,ob, type='response')
+pred2
+
+obs$exports<-obs$exports+0.1
+pred3<-predict(model1,obs, type='response')
+pred3
+
+```
+    
++ 2.2 What is the model’s predicted probability for a civil war in Nigeria in the period beginning 1965? What probability would it predict for a country just like Nigeria in 1965, except that its male secondary school enrollment rate was 30 points higher? What probability would it predict for a country just like Nigeria in 1965, except that exports were 0.1 higher?
+
+```{r}
+#Your solution comes here
+obs1<-file[(file$country=='Nigeria')&(file$year==1965), ]
+obs1<-obs1[, 3:length(obs1)]
+res<-predict(model1,obs1,type='response')
+res
+
+ob1<-obs1
+ob1$schooling<-ob1$schooling+30
+res2<-predict(model1,ob1,type='response')
+res2
+
+obs1$exports<-obs1$exports+0.1
+res3<-predict(model1,obs1,type='response')
+res3
+```
+    
++ 2.3 In parts 2.1 and 2.2, you changed the same predictor variables by the same amounts. If you did your calculations properly, the changes in predicted probabilities are not equal. Explain why not. (The reasons may or may not be the same for the two variables.)
+
+```{r}
+#Your solution comes here
+pred2-pred1
+res2-res
+pred3-pred1
+res3-res
+```
+Logistic regression is a multi-dimensional non-linear function. The two observations which we initially predict (India and Nigeria) have different initial paramenters. Thus, they are at different points of the logistic function. Logistic function has regions where it is steeper (and thus the change is more rapid) and where it is flatter, meaning slower change. By observing the differences between initial probabilities and the probabilities we get with new parameter values, we see they are different. India has larger change, thus with respect to schooling and exports is is on a steeper region of the logistic function.
+
+3. Model evaluation: Logistic regression predicts a probability of civil war for each country and period. Suppose we want to make a definite prediction of civil war or not, that is, to classify each data point. The probability of mis-classification is minimized by predicting war if the probability is > 0.5, and peace otherwise.
+
++ 3.1  Build a 2 × 2 “confusion matrix” (a.k.a. “classification table” or “contigency table”) which counts: the number of outbreaks of civil war correctly predicted by the logistic regression; the number of civil wars not predicted by the model; the number of false predictions of civil wars; and the number of correctly predicted absences of civil wars. (Note that some entries in the table may be zero.) Make sure the rows and columns of the table are clearly labeled.
+
+```{r}
+#Your solution comes here
+predictions<-predict(model1,file,type='response')
+file[,class:=ifelse(predictions>0.5,1,0)]
+conf<-prop.table(table(file$class,file$start),2)
+colnames(conf)<-c('actual peace','actual war')
+row.names(conf)<-c('predicted peace', 'predicted war')
+conf
+```
+  
++ 3.2 What fraction of the logistic regression’s predictions are correct? (Note that this is if anything too kind to the model, since it’s an in-sample evaluation.)
+
+The number of correct predictions is P(predicted peace $\mid$ actual peace)*P(actual peace) + P(predicted war \mid$ actual war) * P(actual war)
+```{r}
+#Your solution comes here
+zeroes<-nrow(file[file$start==0,3])
+total<-nrow(file)
+pp0<-conf[1,1]*(zeroes/total)
+ones<-nrow(file[file$start==1,3])
+pp1<-conf[2,2]*(ones/total)
+correct<-pp0+pp1
+correct
+```
+  
++ 3.3. Consider a foolish (?) pundit who always predicts “no war”. What fraction of the pundit’s predictions are correct on the whole data set? 
+
+```{r}
+#Your solution comes here
+file[,nu:=0]
+prop.table(table(file$nu,file$start))[1,1]
+```
+The fraction of correct predictions equal to the fraction of zeroes in the dataset. 
+
+
+
+
+
+
+
+
+ 
