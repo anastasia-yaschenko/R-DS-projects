@@ -1,0 +1,507 @@
+---
+title: "Homework 4"
+output:
+  html_document:
+    df_print: paged
+---
+
+**Rules**:
+
+1. **The submission deadline is 15.12.2019, 23:59:59**. Your homework should be submitted to `dse2019hsehw4@gmail.com`. **No late submissions will be accepted**;
+
+2. Every group should submit one `.Rmd` file (you should use this file to write up your homework). Submitted file should be named: `vjacisens_ntoropov.Rmd` for the file submitted by Vitalijs Jascisens and Nikita Toropov;
+
+3. **No plagiarism**: all sources (both offline and online have to be acknowledged). Cheating on any part of the assignment results in a **grade of zero** for the entire assignment;
+
+4. We will not be checking your code. All problems have precise answers, hence only the correctness of the answer will be graded.
+
+**Name and Surname**:
+
+1. First student (academic number);
+
+2. Second student (academic number).
+
+# Problem 1: Penalized regression (40 points)
+
+In this question you will examine properties of various penalization techniques.
+
+**Questions:**
+
+1. Data generation. We start by simulating the data. Set the number of observations $n=500$. Then generate the data in the following way:
+$$
+x^* \sim N(0,1) \\
+x_1 ~ = x^* + U[0,0.1] \\
+x_2 = x^* + U[0,0.1] \\
+\dots \\
+x_{1000} = x^* + U[0,0.1] \\
+\epsilon \sim N(0,1) \\
+y = 1+0.5x_1+0.5x_2+\dots0.5x_{10}+\epsilon
+$$
+Where:
+
+    * $U[0,0.1]$ uniformly distributed random variable (with a support  in [0,0.1]);
+  
+```{r}
+set.seed(1)
+#Your solution comes here
+library(data.table)
+gen_x<-function(n){
+  x_<-rnorm(1000,mean=0,sd=1)
+  u<-runif(1000,0,0.1)
+  x<-x_+u
+}
+
+data<-do.call(rbind,lapply(1:500,gen_x))
+m<-c(rep(5,10))
+error<-rnorm(500,mean=0,sd=1)
+y<-list(length=500)
+for (i in 1:500){
+  y[i]<-1+sum(m*data[i,1:10])+error[i]
+}
+data<-as.data.frame(data)
+y<-matrix(y,nrow=500,ncol = 1)
+data<-cbind(data,y)
+data
+
+```
+
+2. Repeat (1) 100 times. In each replication estimate Lasso regression of $y$ on all 1000 covariates (except $x^*$). To select coefficients always use AICc. How many correct coefficients do you recover on average (for example, if in the first regression you recovered $x_1, x_2$ and $x_3$ and some other coefficients, then in the first regression you managed to recover 3 correct coefficients)?
+
+```{r}
+#Your solution comes here  
+library(gamlr)
+m<-c(rep(5,10))
+res1<-vector(length=100)
+for (j in 1:100){
+  data<-do.call(rbind,lapply(1:500,gen_x))
+  error<-rnorm(500,mean=0,sd=1)
+  y<-list(length=500)
+  for (i in 1:500){
+    y[i]<-1+sum(m*data[i,1:10])+error[i]
+  }
+  data<-as.data.frame(data)
+  y<-matrix(y,nrow=500,ncol = 1)
+  data<-cbind(data,y)
+  
+  lasso<-gamlr(data[,1:1000],unlist(data$y))
+  res1[j]<-sum(coef(lasso)!=0)
+}
+res1<-mean(res1)
+res1
+```
+
+
+3. Repeat (1) 100 times. When simulating the data instead of taking $U[0,0.1]$ use $U[0,10]$. In each replication estimate Lasso regression of $y$ on all 1000 covariates (except $x^*$). To select coefficients always use AICc. How many correct coefficients do you recover on average (for example, if in the first regression you recovered $x_1, x_2$ and $x_3$ and some other coefficients, then in the first regression you managed to recover 3 correct coefficients)?
+
+```{r}
+#Your solution comes here  
+gen_x_10<-function(ld){
+  x_2<-rnorm(1000,mean=0,sd=1)
+  u2<-runif(1000,0,10)
+  x2<-x_2+u2
+}
+
+
+res2<-vector(length=100)
+m<-c(rep(5,10))
+for (s in 1:100){
+  data2<-do.call(rbind,lapply(1:500,gen_x_10))
+  error2<-rnorm(500,mean=0,sd=1)
+  y2<-list(length=500)
+  for (ii in 1:500){
+    y2[ii]<-1+sum(m*data2[ii,1:10])+error2[ii]
+  }
+  data2<-as.data.frame(data2)
+  y2<-matrix(y2,nrow=500,ncol = 1)
+  data2<-cbind(data2,y2)
+  
+  lasso2<-gamlr(data2[,1:1000],unlist(data2$y))
+  res2[s]<-sum(coef(lasso2)!=0)
+}
+res2<-mean(res2)
+res2
+```
+
+4. Examine the matrix of $x$'s in (2) and (3). Why do you think results differ in (2) and (3).
+
+```{r}
+#Your solution comes here
+data[1:1000]
+data2[1:1000]
+```
+Answer: in (2) more coeffcients are recovered. In (3) variance of x  is larger,
+as now the possible range for the values of uniformly distributed variable is wider.
+As coefficient estimates depend on x`s, then their variance is also larger. The task 
+of LASSO is to penalize this variance. So as it turns out that in (2) variance of estimates is smaller, lasso penalizes (2) less, and shrinks less coefficients there.
+Alternatively, more variation in X helps to select right number of coefficients.
+
+5. Next, generate the data only once using $U[0,0.1]$. Divide the data into training data and test data. Training data should contain 80% of all observations chosen at random, test data should contain remaining observations. Use function `glmnet()` to estimate the model for different choices of alpha. Alpha should vary from 0 to 1 in steps of 0.1 (i.e., $0,0.1,\dots,1$). Which alpha delivers the best performance in terms of MSE on the test data. Why? When doing prediction you should always use min CV lambda. Before doing this problem it is worth going through the following tutorial: https://web.stanford.edu/~hastie/glmnet/glmnet_alpha.html.
+
+```{r}
+#Your solution comes here 
+library(glmnet)
+data3<-do.call(rbind,lapply(1:500,gen_x))
+m<-c(rep(5,10))
+error3<-rnorm(500,mean=0,sd=1)
+y3<-list(length=500)
+for (ie in 1:500){
+  y3[ie]<-1+sum(m*data3[ie,1:10])+error3[ie]
+}
+data3<-as.data.frame(data3)
+y3<-matrix(y3,nrow=500,ncol = 1)
+data3<-cbind(data3,y3)
+
+ind_train<-sample(1:dim(data3)[1],dim(data3)[1]*0.8,F)
+data_train<-data3[ind_train,]
+data_test<-data3[-ind_train,]
+
+mse_x<-function(a){
+  las_mod1<-glmnet(as.matrix(data_train[,1:1000]), unlist(data_train[,1001]), alpha=a)
+  pred<-predict(las_mod1,as.matrix(data_test[,1:1000]),s=las_mod1$lambda[which.max(las_mod1$dev.ratio)])
+  mse<-mean((unlist(data_test[,1001])-pred)^2)
+  mse
+}
+err<-vector(length = 11)
+alp<-c(0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1)
+for (h in 1:11){
+  err[h]<-mse_x(alp[h])
+}
+alp[which.min(err)]
+```
+As alpha=1 minimizes MSE, it means that lasso is the best model.Probably, this is because there are too many regressors, so shrinkage of most of them to zero improves the model as compared to ridge or intermediate cases when less variables are eliminated. Smaller number of variables reduces variance of coefficents.
+
+
+# Problem 2: Does Abortion Reduce Crime? (30 points)
+
+The article by John J Donohue and Steven D Levitt tests whether the past abortion rate affects crime today (for more details see: John J Donohue and Steven D Levitt. The impact of legalized abortion on crime. The Quarterly Journal of Economics, 116:379–420, 2001). In this question we will use data science techniques to re - examine this question.
+
+The dataset `data_abortion.csv` contains following variables:
+
+  * `y`: crime related measure. Large values of `y` are associated with large crime today;
+  
+  * `d`: abortion related measure. Large values of `d` are associated with large past abortion rate.
+  
+  * `phone`: cell phone usage related measure. Large values of `phone` are associated with large past cell phone usage.
+  
+  * Other control variables: meaning not very important.
+  
+**Questions**:
+
+1. Read the data. Convert the variable `s` to factor.
+
+```{r}
+#Your solution comes here 
+library(data.table)
+wd<-'/Users/Dell/Desktop/R'
+setwd(wd)
+dt<-fread('data_abortion.csv')
+dt$s<-as.factor(dt$s)
+dt$s
+```
+
+2. Run OLS of `y` on  `d` and all other control variables except `phone`. Does past abortion causes crime today to decrease?
+
+```{r}
+#Your solution comes here 
+mod1<-lm(y~. -phone, data=dt)
+summary(mod1)
+```
+The p-value of coefficient of d < 1%  so coefficient is significant at 1% significance level and is negative, so it can be seen there is negative relation between past abortion and crime. We can say only about negative relation, not about direct causality, though.
+
+3. Run OLS of `y` on `phone` and all other control variables except `d`. Does past cell phone usage causes crime today to decrease. What do you conclude about results obtained in point (2)?
+
+```{r}
+#Your solution comes here 
+mod2<-lm(y~. -d, data=dt)
+summary(mod2)
+```
+The p-value of coefficient of phone is < 1% so coefficient is significant at 1% significance level and  is negative,so it can be seen there is negative relation between past phone usage and crime.Again, no claims about causality. We cannot reject past conclusion that d has effect on crime today since d is not included in this regression. If y was regressed both on phone and d, then one of them could become insignificant.
+
+4. Next, convert `t` to factor. Now run the regression of `y` on (below I am giving the total list of covariates):
+
+    * `d`, `t`, `phone*s`
+  
+    * All other variables except `d`, `t`, `phone*s` in levels;
+  
+    * All second order interactions of all other variables except `d`, `t`,`s`,`phone`,`phone*s`;
+  
+    By second order interactions of variables $x_1,x_2  \text{ and } x_3$ I mean: $x_1x_2, x_1x_3 \text{ and }x_2x_3$.
+
+    Does past abortion causes crime today to decrease? What do you think might prevent you from making a definitive conclusion?
+```{r}
+#Your solution comes here  
+dt$t<-as.factor(dt$t)
+mod_har<-lm(y~d+t+phone*s+I(phone^2)+poly(pop,prison,police,ur,inc,pov,afdc,gun,beer,degree=2,raw=T),data=dt) 
+mod_har$coefficients
+```
+Coefficient of d is significant only at 10% significance level and is positive. Thus, it seems not to have virtually any impact on crime today. This is the result we get when we include phone variable, as discussed in previous question. However, we cannot make a definitive decision since there are many variables in the regression, so coefficients have large variance and can be insignificant because of this. If variance is reduced, then conclusion becomes more definitive.
+
+5. We next implement an algorithm which allows you to make a definitive conclusion in the previous case. Please implement the following algorithm:
+  
+    * Split the data into two folds. Each fold should contain the same number of observations;
+  
+    * For fold $i$:
+  
+      (i) Do Lasso estimation of `d` on all other covariates from the previous point. Obtain residuals on the fold not used in the estimation. You should use tuning parameter selected by AICc. Store these residuals.
+    
+      (ii) Do Lasso estimation of `y` on all other covariates from the previous point (except `d`). Obtain residuals on the fold not used in the estimation. You should use tuning parameter selected by AICc. Store these residuals.
+    
+    * Combine all the residuals from (i) into vector $\tilde{d}$. Combine all the residuals from (ii) into vector $\tilde{y}$.
+  
+    * Do the linear regression of $\tilde{y}$ on $\tilde{d}$. Do inference using robust standard errors. The coefficient from  $\tilde{y}$ on $\tilde{d}$ provides you with the effect of past abortion on crime today and also gives you correct standard errors.
+
+    What do you conclude?
+```{r}
+set.seed(1)
+#Your solution comes here
+library(gamlr)
+library(glmnet)
+library(sandwich)
+library(lmtest)
+
+
+data_generation<-function(da){
+  reg_x<-subset(da,select=c(t))#https://www.listendata.com/2015/06/r-keep-drop-columns-from-data-frame.html
+  phone.s<-as.numeric(as.character(da$s))*da$phone 
+  reg_x<-cbind(reg_x,phone.s)
+  sam_dat2<-subset(da,select=-c(y,d,t,s,phone))
+  for (e in 1:9){
+    reg_x<-cbind(reg_x,sam_dat2[,1]*sam_dat2[,..e])
+  }
+  for (w in 2:9){
+    reg_x<-cbind(reg_x,sam_dat2[,2]*sam_dat2[,..w])
+  }
+  for (r in 3:9){
+    reg_x<-cbind(reg_x,sam_dat2[,3]*sam_dat2[,..r])
+  }
+  for (t in 4:9){
+    reg_x<-cbind(reg_x,sam_dat2[,4]*sam_dat2[,..t])
+ }
+  for (z in 5:9){
+    reg_x<-cbind(reg_x,sam_dat2[,5]*sam_dat2[,..z])
+}
+  for (mm in 6:9){
+    reg_x<-cbind(reg_x,sam_dat2[,6]*sam_dat2[,..mm])
+  }
+  for (vv in 7:9){
+    reg_x<-cbind(reg_x,sam_dat2[,7]*sam_dat2[,..vv])
+  }
+  for (f in 8:9){
+    reg_x<-cbind(reg_x,sam_dat2[,8]*sam_dat2[,..f])
+  }
+ reg_x<-cbind(reg_x,sam_dat2[,9]*sam_dat2[,9])
+  reg_x<-cbind(reg_x,da$phone^2)
+  reg_x
+}
+
+ix<-sample(dim(dt)[1],dim(dt)[1]/2,F)
+dat_tr<-dt[ix]
+dat_te<-dt[-ix]
+dtt<-data_generation(dat_tr)
+dtee<-data_generation(dat_te)
+
+#fold1
+mod_las<-gamlr(data.matrix(dtt),dat_tr$d)
+pred_l<-predict(mod_las,data.matrix(dtee),select=which.min(AICc(mod_las)))
+resid0<-dat_te$d-pred_l
+
+mod_las1<-gamlr(data.matrix(dtt),dat_tr$y)
+pred_l1<-predict(mod_las1,data.matrix(dtee),select=which.min(AICc(mod_las1)))
+resid11<-dat_te$y-pred_l1
+
+#fold2
+mod_las2<-gamlr(data.matrix(dtee),dat_te$d)
+pred_l2<-predict(mod_las2,data.matrix(dtt),select=which.min(AICc(mod_las2)))
+resid12<-dat_tr$d-pred_l2
+
+
+mod_las122<-gamlr(data.matrix(dtee),dat_te$y)
+pred_l22<-predict(mod_las122,data.matrix(dtt),select=which.min(AICc(mod_las122)))
+resid122<-dat_tr$y-pred_l22
+
+
+resid11<-as.vector(unname(as.matrix(resid11))[,1])
+resid0<-as.vector(unname(as.matrix(resid0))[,1])
+resid122<-as.vector(unname(as.matrix(resid122))[,1])
+resid12<-as.vector(unname(as.matrix(resid12))[,1])
+
+resid0<-append(resid0,resid11)
+resid12<-append(resid12,resid122)
+
+
+final<-lm(resid12~resid0)
+
+se<-coeftest(final,vcov=vcovHC(final,type='HC1'))[2,2]
+poit<-unname(final$coefficients[2])
+c(poit-1.96*se,poit+1.96*se)
+```
+So we can see that the robust confidence interval contains zero. Thus, the coefficient is insignificant, so past abortion does not influence crime today.
+
+# Problem 3: Boosting in a Linear Model (30 points)
+
+Dataset `dataset_boosting.csv` contains `y` and three predictors: `x1`, `x2` and `x3`. In this problem you will implement the algorithm described on page 323 in the `ISLR`. In what follows use $\lambda=0.01$.
+
+**Questions**:
+
+0. Split the data into train data and test data. Train data should contain  80% of all observations. Test data should contain remaining observations.
+
+```{r}
+set.seed(1)
+#Your solution comes here  
+library(data.table)
+wd<-'/Users/Dell/Desktop/R'
+setwd(wd)
+file<-fread('data_boosting.csv')
+idx<-sample(dim(file)[1],dim(file)[1]*0.8,F)
+file_test<-file[-idx,]
+file_train<-file[idx,]  
+```
+
+1. First define a `vec_cut<-seq(0,20,0.01)`. Next, write a function, `function_boost`.As an input this function should take one covariate (i.e., for example vector $x1$), outcome (i.e., vector `y`) and an element from `vec_cut`, i.e., `vec_cut[2]`. For a given `x` and an element from `vec_cut` (let's call it `vc`) this function does the following:
+
+  * Splits the vector `y` into two parts: `y` where `x` is smaller than `vc` (let's call this set $A_1$) and `y` where `x` is larger or equal than `vc`  (let's call this set $A_2$);
+  
+  * Calculates mean of $y$ within $A_1$ (let's call it $y_1$) and mean of $y$ within $A_2$ (let's call it $y_2$);
+  
+  * Calculates the following RSS:
+  
+$$
+\sum_{i\in A_1} (y_i - y_1)^2+ \sum_{i\in A_2} (y_i - y_2)^2 \\
+$$
+  
+  * Predicts y as follows:
+  
+$$
+\hat{y}_i = y_1 \text{ if } i\in A_1 \\
+\hat{y}_i = y_2 \text{ if } i\in A_2 \\
+$$
+  
+  * Outputs RSS and a vector of predictions for a particular cutoff.
+
+```{r}
+#Your solution comes here  
+vec_cut<-seq(0,20,0.01)
+function_boost<-function(x,y,vc){
+  A1<-y[x<vc]
+  A2<-y[x>=vc]
+  y1<-mean(A1)
+  y2<-mean(A2)
+  y_pred<-vector(length=length(x))
+  rss<-sum((A1-y1)^2)+sum((A2-y2)^2)
+  for (i in 1:length(x)){
+    if (x[i]<vc){
+      y_pred[i]<-y1
+    }
+    if (x[i]>=vc){
+      y_pred[i]<-y2
+    }
+  }
+  list(rss,y_pred)
+}
+```
+
+2. Initialize the prediction, i.e., set $\hat{y}^{final}_i=0$ and $r_i=y_i$;
+
+```{r}
+#Your solution comes here  
+r<-file_train$y
+y_fin<-c(rep(0,dim(file_train)[1]))
+y_fin
+r
+```
+
+
+3. Next, apply function from step (2) on $r_i$ and output the prediction $\hat{r}_i^{(1)}$ associated with the minimum RSS across $x_1, x_2$ and $x_3$ and all possible cutoffs.
+
+```{r}
+#Your solution comes here  
+iter<-function(y_ex){
+results<-vector(length=length(vec_cut))
+rr1<-vector(length=length(vec_cut))
+for (i in 1:length(vec_cut)){
+  bst<-function_boost(file_train$x1,y_ex,vec_cut[i])
+  results[i]<-bst[[1]]
+  rr1[i]<-list(bst[[2]])
+}
+
+results2<-vector(length=length(vec_cut))
+rr2<-vector(length=length(vec_cut))
+for (i in 1:length(vec_cut)){
+  bst2<-function_boost(file_train$x2,y_ex,vec_cut[i])
+  results2[i]<-bst2[[1]]
+  rr2[i]<-list(bst2[[2]])
+}
+
+results3<-vector(length=length(vec_cut))
+rr3<-vector(length=length(vec_cut))
+for (i in 1:length(vec_cut)){
+  bst3<-function_boost(file_train$x3,y_ex,vec_cut[i])
+  results3[i]<-bst3[[1]]
+  rr3[i]<-list(bst3[[2]])
+}
+
+results<-append(results,results2)
+results<-append(results,results3)
+im<-which.min(results)
+rr1<-append(rr1,rr2)
+rr1<-append(rr1,rr3)
+r_hat1<-rr1[[im]]
+outpu<-list(im,r_hat1)
+outpu
+}
+
+r_hat<-iter(r)
+r_hat[[2]]
+```
+
+
+4. Do one iteration and update $\hat{y}^{final}_i$ using the following rule:  
+$$
+\hat{y}^{final}_i = \hat{y}^{final}_i + \lambda \hat{r}_i^{(1)} \\
+r_i = r_i - \lambda \hat{r}_i^{(1)}
+$$
+The prediction in this case if given by $\hat{f}^{final}_i$. What MSE do you get on the test data?
+
+```{r}
+#Your solution comes here  
+lamd<-0.01
+cut_idx<-r_hat[[1]]
+vec_isd<-vec_cut[cut_idx-2000]
+y_fin<-y_fin+lamd*r_hat[[2]]
+r<-r-lamd*r_hat[[2]]
+
+train_err<-mean((file_test$y-function_boost(file_test$x2,file_test$y,vc=vec_isd)[[2]])^2)
+train_err
+
+```
+
+5. This is the first step in the boosting algorithm. You can iterate the above algorithm for $b=2,\dots,100$. 
+
+    The final prediction is then given by:
+$$
+\hat{y}^{final}_i = \sum_b\lambda \hat{r}_i^{(b)}
+$$
+    Which b gives you the smallest test MSE?
+```{r}
+#Your solution comes here  
+B<-100
+mse<-vector(length=100)
+vec_pred<-vector(length = 100)
+for (v in 2:B){
+  r_hat<-iter(r)
+  y_fin<-y_fin+lamd*r_hat[[2]]
+  r<-r-lamd*r_hat[[2]]
+  vec_pred[v]<-r_hat[[1]]
+}
+vec_pred[1]<-cut_idx
+  
+vec_pred<-vec_pred-2000
+
+ms_tr<-vector(length=length(vec_pred))
+for (gf in 1:length(vec_pred)){
+  tr_res<-function_boost(file_train$x2,file_train$y,vec_cut[vec_pred[gf]])[[2]]
+  ms_tr[gf]<-mean((file_train$y-tr_res)^2)
+}
+which.min(ms_tr)
+```
+

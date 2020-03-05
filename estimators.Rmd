@@ -1,0 +1,487 @@
+---
+title: "Homework 2"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+**Rules**:
+
+1. **The submission deadline is 14.11.2019, 23:59:59**. Your homework should be submitted to `dse2019hsehw2@gmail.com`. **No late submissions will be accepted**;
+
+2. Every group should submit one `.Rmd` file (you should use this file to write up your homework). Submitted file should be named: `vjacisens_ntoropov.Rmd` for the file submitted by Vitalijs Jascisens and Nikita Toropov;
+
+3. **No plagiarism**: all sources (both offline and online have to be acknowledged). Cheating on any part of the assignment results in a **grade of zero** for the entire assignment;
+
+4. All problems are equally weighted;
+
+5. We will not be checking your code. All problems have precise answers, hence only the correctness of the answer will be graded.
+
+**Name and Surname**:
+
+1. First student (academic number);
+
+2. Second student (academic number).
+
+# Problem 1: Parsing HTML (This is a medium difficulty problem)
+
+**Description of the data:**
+
+* In this problem you will do some `.html` parsing. Folder `ZKH_HTML` contains 36 `.html` pages;
+
+* Each page contains following fields:
+
+  1. Address;
+  
+  2. Year;
+  
+  3. Total area;
+  
+  4. Company.
+
+**Rules:**
+
+You are allowed to use base `R` functions. Additionally, you are allowed to use functions from following packages:
+
+* `data.table`;
+
+* `xml2`;
+
+* `stringr`.
+
+**Questions:**
+
+1. Read the file `1.html`. Within this `.html` file find all `tr` nodes containing information on:
+
+    1. Address;
+  
+    2. Year;
+  
+    3. Total Area;
+  
+    4. Company.
+
+```{r}
+#Your solution comes here:
+
+#Clear everything and load the needed libraries:
+rm(list=ls())
+library(xml2)
+library(stringr)
+library(data.table)
+
+#Define the working directory:
+work_dir<-"/Users/vitalijs/Desktop/ZKH_HTML"
+
+#Read one page:
+setwd(work_dir)
+data<-read_html("1.html")
+
+#Find all tr nodes containing needed info:
+data0<-read_html("1.html")
+data1<-xml_find_all(data0, ".//tr")
+data1<-data1[6:length(data1)]
+data1
+```
+
+2. Write the function `function_one_tr`. As an input this function should take any of `tr` nodes you obtained in the previous point. This function should output the `data.table` with one row containing information on following variables:
+
+    1. `href`: url of the address (it will be in the format: `/myhouse/profile/view/id/`);
+  
+    2. `address`: address;
+  
+    3. `year`: year
+  
+    4. `sq_m`: total area;
+  
+    5. `company`: company.
+
+```{r}
+#x is a tr node
+# Your code goes here:
+function_one_tr<-function(x){
+  y<-xml_find_all(x,'.//a')
+  att<-xml_attrs(y)[[1]]
+  ll<-strsplit(xml_text(x),'\n                            ')
+  if (str_detect(ll[[1]][2],'н.д.')==T){
+    ll[[1]][2]<-'0'
+  }
+  if (str_detect(ll[[1]][3],'н.д.')==T){
+    ll[[1]][3]<-'0'
+  }
+  ll[[1]][2]<-as.integer(ll[[1]][2])
+  ll[[1]][3]<-as.numeric(sub(' ','',ll[[1]][3]))
+  ll[[1]][4]<-str_replace_all(gsub('\n                        ','', ll[[1]][4]),'\"','')
+  ll[[1]][5]<-att
+  tabl<-transpose(as.data.table(ll[[1]]))
+  names(tabl)<-c('adress', 'year','sq_m','company','href')
+  tabl
+}
+```
+
+3. Write the function `function_one_page`. This function should first read a given page (this is an input to the function), extract information from all rows and return the data.table with following columns:
+
+    1. `href`: url to address;
+  
+    2. `address`: address;
+  
+    3. `year`: year
+  
+    4. `sq_m`: total address;
+  
+    5. `company`: company.
+
+```{r}
+#x is a .html page, for example "1.html"
+# Your code goes here:
+function_one_page<-function(x){
+  file<-read_html(x)
+  dat<-xml_find_all(file, ".//tr")
+  dat<-dat[6:length(dat)]
+  res2<-list()
+  for (n in 1:length(dat)){
+    res2[[n]]<-unname(as.list(function_one_tr(dat[n]))) #https://stat.ethz.ch/R-manual/R-devel/library/base/html/unname.html
+  }
+  rr<-matrix(unlist(res2), byrow = T, ncol=5)
+  final<-as.data.frame(rr)
+  names(final)<-c('adress','year','sq_m','company','href')
+  final
+}
+```
+
+4. Apply a function `function_one_page` to all `.html` pages within the folder `ZKH_HTML`, create a final dataset `data` (`data` should be a `data.table`);
+
+```{r}
+# Your code goes here:
+ini<-as.list(list.files())
+ini<-ini[str_detect(ini,'html')==T]
+total<-list()
+for (q in 1:length(ini)){
+  total[[q]]<-function_one_page(ini[[q]][1])
+}
+total
+for (f in 1:length(total)){
+  total[[f]]<-unname(as.list(total[[f]]))
+}
+data<-matrix(ncol=5)
+n<-1
+while(n<=36){
+  d1<-matrix(unlist(total[[n]]), byrow=F, ncol=5)
+  data<-rbind(data,d1)
+  n<-n+1
+}
+data<-as.data.table(data)
+names(data)<-c('adress','year','sq_m','company','href')
+data<-data[2:nrow(data),]
+```
+
+5. Create the field `street` in the following way: split `address` on comma and take the second element. Calculate the street with the maximum number of observations.
+
+```{r}
+# Your code goes here:
+stre<-function(x){
+  strsplit(as.character(x),',')[[1]][2]
+}
+
+data[,street:=apply(data[,.(adress)],1,stre)]
+t1<-table(data$street)
+t1<-sort(t1)
+t1[length(t1)]
+```
+
+
+
+# Problem 2: The Analysis of OLS (This is a simple problem)
+
+In this problem you will analyse properties of several OLS estimators.
+
+**Questions:**
+
+
+1. Consider the following model:
+
+$$
+Y_i = \beta + \epsilon_i \\
+\mathbb{E}[\epsilon_i] = 0 \\
+Y_i: \, i.i.d
+$$
+Suppose, you are given an i.i.d sample of $Y_i$:
+
+  * Derive OLS estimator of $\beta$, call it $\hat{\beta}$;
+
+  * Is  $\hat{\beta}$ an unbiased estimator of $\beta$?
+
+  * Is  $\hat{\beta}$ a consistent estimator of $\beta$?
+  
+  * Derive asymptotic distribution of  $\hat{\beta}$.
+  
+
+$$
+Your \, solution \, comes \, here;
+$$$$ min \sum_{i=1}^{n} (Y_i-\beta)^2$$
+$$\sum_{i=1}^{n} -2(Y_i-\beta) = 0$$
+$$\sum_{i=1}^{n} Y_i-\beta = \sum_{i=1}^{n} Y_i - n\beta=0$$
+$$ \hat{\beta}= \bar{Y}$$
+
+$$\mathbb{E}(\hat{\beta})=\mathbb{E}(\bar{Y})=\frac{\mathbb{E}(\sum_{i=1}^{n} Y_i)}{n}=\frac{\mathbb{E}(\sum_{i=1}^{n}(\beta + \epsilon))}{n}=\frac{\sum_{i=1}^{n} (\beta + 0)}{n}=\frac{n\beta}{n}=\beta $$
+
+By law of Large Numbers,
+$$\hat{\beta}=\bar{Y}=\frac{\sum_{i=1}^{n} Y_i}{n} \rightarrow \mathbb{E}(Y_i)$$ since Y is i.i.d
+$$\mathbb{E}(Y_i)=\mathbb{E}(\beta+\epsilon_i)=\mathbb{E}(\beta)+\mathbb{E}(\epsilon_i)=\beta + 0=\beta$$
+
+$$\hat{\beta}=\bar{Y}=\frac{\sum_{i=1}^{n} Y_i}{n}=\frac{\sum_{i=1}^{n} (\beta + \epsilon_i)}{n}=\frac{n \beta}{n} +\frac{\sum_{i=1}^{n} \epsilon_i}{n}=\beta + \bar{\epsilon}$$
+$$ \sqrt{n}(\hat{\beta}-\mathbb{E}(\hat{\beta})) = \sqrt{n}(\hat{\beta}-\beta)=\bar{\epsilon}$$
+$$\frac{\sqrt{n}(\sum_{i=1}{n} (\epsilon_i-\mathbb{E}(\epsilon_i))}{n} \rightarrow \mathbb{N}(0;\mathrm{Var} (\epsilon_i))$$
+$$\sqrt{n}(\hat{\beta}-\beta) \rightarrow \mathbb{N}(0;\mathrm{Var}(\epsilon_i))$$
+
+
+
+
+  
+2. Consider the following model:
+
+$$
+Y_i = \beta X_i + \epsilon_i \\
+\mathbb{E}[\epsilon_i] = 0 \\
+\mathbb{E}[\epsilon_ix_i] = 0 \\
+X_i: scalar \\
+(X_i,Y_i): \, i.i.d
+$$
+
+
+
+  * Derive OLS estimator of $\beta$, call it $\hat{\beta}$;
+
+  * Is  $\hat{\beta}$ an unbiased estimator of $\beta$?
+
+  * Is  $\hat{\beta}$ a consistent estimator of $\beta$?
+
+  * Derive asymptotic distribution of  $\hat{\beta}$.
+  
+$$
+Your \, solution \, comes \, here;
+$$
+$$ min \sum_{i=1}^{n} (Y_i -\beta X_i)^2$$
+$$ \sum_{i=1}^{n}(Y_i-\beta X_i)X_i = 0$$
+$$\sum_{i=1}^{n} = \beta \sum_{i=1}^{n}x_i^2 $$
+$$ \hat{\beta} = \frac{\sum_{i=1}^{n} X_i Y_i}{\sum_{i=1}^{n} X_i^2}$$
+
+$$\mathbb{E}(\hat{\beta})=\frac{\mathbb{E}(\sum_{i=1}^{n} X_i Y_i)}{\mathbb{E}(X_i^2)}=\frac{\sum_{i=1}^{n} X_i \mathbb{E}(Y_i)}{\sum_{i=1}^{n} X_i^2}=\frac{\sum_{i=1}^{n}X_i \mathbb{E}(\beta X_i + \epsilon_i)}{\sum_{i=1}^{n} X_i^2}=\frac{\sum_{i=1}^{n} X_i^2 \beta }{\sum_{i=1}^{n} X_i^2}=\beta$$
+
+$$\frac{\sum_{i=1}^{n} X_i Y_i / n}{\sum_{i=1}^{n} X_i ^2 / n} = \frac{\sum_{i=1}^{n}\beta X_i^2}{\sum{i=1}^{n} X_i^2}=\beta$$
+$$ \frac{\sum_{i=1}^{n} X_i Y_i}{n} \rightarrow \mathbb{E}(X_i Y_i)$$ in probability
+$$\mathbb{E}(X_i Y_i)=\mathbb{E}(X_i(\beta X_i + \epsilon_i))=\mathbb{E}(\beta X_i^2 + X_i \epsilon_i)=\beta X_i^2$$
+$$\frac{\sum_{i=1}^{n} X_i^2}{n} \rightarrow \mathbb{E} (X_i^2)$$
+$$\mathbb{E} (X_i^2)=X_i^2$$
+
+$$\hat{\beta}=\frac{\sum_{i=1}^{n} X_i(\beta X_i + \epsilon_i)}{\sum_{i=1}^{n} X_i^2}=\frac{\sum_{i=1}^{n} (X_i^2 \beta +X_i \epsilon_i}{\sum_{i=1}^{n} X_i^2}= \beta +\frac{\sum_{i=1}^{n} X_i \epsilon_i}{\sum{i=1}^{n} X_i^2}$$
+$$\sqrt{n}(\hat{\beta}-\beta)=\frac{\sqrt{n} \sum_{i=1}^{n} (X_i \epsilon_i) / n}{\sum_{i=1}^{n} X_i^2 / n} \rightarrow \mathbb{N}(0;\frac{\mathrm{Var}(\epsilon_i)}{X_i^2})$$
+$$ \frac{\sum_{i=1}^{n} X_i^2}{n} \rightarrow \mathbb{E}(X_i^2) = X_i^2$$
+$$\frac{\sqrt{n}(\sum_{i=1}^{n} X_I \epsilon_i - \mathbb{E}(X_i \epsilon_i}{n} \rightarrow \mathbb{N}(0;\frac{\mathrm{Var}(\epsilon_i)}{X_i^2})$$
+
+
+
+# Problem 3: Model Selection (This is a rather difficult problem)
+
+Consider two linear regression models, U (unrestricted) and R (restricted) under assumptions of random sampling, mean independence and homoscedasticity:
+\begin{align*}
+	U&: y_i = \alpha + \beta x_i + \varepsilon_i \\
+	R&: y_i = \alpha + \varepsilon_i
+\end{align*}
+Let us define a test statistics, based on model U as:
+\begin{equation*}
+	t = \sqrt{n}\cdot\frac{\widehat{\beta}_{OLS}}{\sigma}
+\end{equation*}
+where $\sigma^2$ is asymptotic variance of $\widehat{\beta}_{OLS}$, i.e.
+\begin{equation*}
+	\sigma^2 = \frac{V(\varepsilon_i)}{V(x_i)} 
+\end{equation*}
+
+1. Show that $\lim\limits_{n \rightarrow \infty} P_R(|t| > c)$, i.e. limit of probability of $t > c$ if $\beta=0$ equals to:
+
+$$
+2\Phi(-c)
+$$
+\\
+\\
+Consider $$\sqrt{n}(\hat{\beta} - \beta)$$ which is distributed as $\mathcal{N}$(0, $\frac{Var(\epsilon{}_i)}{Var(x_i)})$ \\
+\\*
+As $\beta$ = 0, $$\sqrt{n}(\hat{\beta})$$ is also distributed as $\mathcal{N}$(0, $\frac{Var(\epsilon{}_i)}{Var(x_i)})$
+\\*
+Based on lecture derivations, we can show that  $$t = \frac{\sqrt{n}(\hat{\beta})}{\sigma}$$ is distributed as $\mathcal{N}$(0, 1)
+\\*
+Therefore, $$\lim_{n \to +\infty} P_R(|t|>c) = \lim_{n \to +\infty} [ P(t\in (-\infty; -c)) +  P(t\in (+c; +\infty))] =$$
+$$= \lim_{n \to +\infty} [\Phi(-c) + \Phi(-c)] = 2\Phi(-c),$$ where $\Phi$ is a standard normal cumulative probability function.
+\\
+
+
+2. Show that $\lim\limits_{n \rightarrow \infty} P_U(|t| \leq c)$, i.e. limit of probability of $t \leq c$ if $\beta \neq 0$ equals to:
+
+$$
+\Phi\left(c - \sqrt{n}\cdot\frac{\beta}{\sigma}\right) - \Phi\left(-c - \sqrt{n}\cdot\frac{\beta}{\sigma}\right)
+$$
+\\
+\\
+Recall that $\sqrt{n}(\hat{\beta} - \beta) \sim \mathcal{N}(0, \sigma{})$
+$$\lim_{n \to +\infty} P_U(|t|\leq{}c) = \lim_{n \to +\infty} [ P(t \in (-c, c))] =$$
+$$ = \lim_{n \to +\infty} P(-c \leq{} \sqrt{n}\frac{{}\hat{\beta}}{\sigma} \leq{} c) $$
+$$= \lim_{n \to +\infty} [P(-c\sigma - \sqrt{n}\beta \leq{} \sqrt{n}\hat{\beta}-\sqrt{n}\beta \leq{}
+c\sigma - \sqrt{n}\beta)] =$$ 
+$$ Z = -c + \sqrt{n}\frac{\beta}{\sigma} = -(c - \sqrt{n}\frac{\beta}{\sigma})\ and\ Z = c + \sqrt{n}\frac{\beta}{\sigma} = -(-c - \sqrt{n}\frac{\beta}{\sigma})$$
+Then,
+$$ = \Phi(-(-c - \sqrt{n}\frac{\beta}{\sigma})) - \Phi(-(c - \sqrt{n}\frac{\beta}{\sigma})) = $$
+$$ = 1 - \Phi((-c - \sqrt{n}\frac{\beta}{\sigma})) - (1 - \Phi((c - \sqrt{n}\frac{\beta}{\sigma}))) = $$
+$$ = \Phi(c - \sqrt{n}\frac{\beta}{\sigma}) - \Phi(-c - \sqrt{n}\frac{\beta}{\sigma})) = $$ 
+\\
+
+
+Let us consider the selection procedure, which selects between models $R$ and  $U$, based on statistics $t$ and threshold $c_n$ (the threshold may depend on n), that is
+\begin{equation*}
+    \widehat{M} = 
+    \begin{cases}
+        U, |t| > c_n \\
+        R, |t| \leq c_n \\
+    \end{cases}
+\end{equation*}
+Recall, that model selection procedure will be consistent if two conditions hold:
+
+* $\lim\limits_{n\rightarrow\infty}P_R\left(\widehat{M} = R\right) = 1$
+
+* $\lim\limits_{n\rightarrow\infty}P_U\left(\widehat{M} = U\right) = 1$
+
+Less formally, probability of selecting true model goes to 1 as sample size goes to infinity. To check the model consistency you need to verify that both limits equal 1. If any of those limits do not equal 1 then the model is said to be not consistent.
+
+3. Is $\widehat{M}$ consistent if $c_n = 2$?
+4. Is $\widehat{M}$ consistent if $c_n = n^{1/3}$?
+5. Is $\widehat{M}$ consistent if $c_n = n^{2/3}$?
+6. Suppose $c_n = n^p$. What are the conditions on $p$ for $\widehat{M}$ to be consistent?
+
+$$\lim\limits_{n \rightarrow \infty} P_U(|t| > 2)=\lim\limits_{n \rightarrow \infty} [P(t < -2) + P(t > 2)] =$$
+$$=2\Phi(-2 - \sqrt{n}\frac{\beta}{\sigma}) = 0\ as \ n \rightarrow \infty$$ \\
+Hence, consistency is not preserved here as one of the limits tends to 0.
+\\
+\\
+
+
+)$$\lim\limits_{n \rightarrow \infty} P_U(|t| > с_n)=\lim\limits_{n \rightarrow \infty} [P(t < -c_n) + P(t > c_n)] = \lim\limits_{n \rightarrow \infty} [1 - \Phi(n^{\frac{1}{3}} - \sqrt{n}\frac{\beta}{\sigma}) + \Phi(-n^{\frac{1}{3}} -  \sqrt{n}\frac{\beta}{\sigma})]$$
+As $n^{\frac{1}{3}} - \sqrt{n}\frac{\beta}{\sigma}$ goes to -infinity as n approaches infinity then $\Phi$ goes to 0
+\\
+As -$n^{\frac{1}{3}} - \sqrt{n}\frac{\beta}{\sigma}$ goes to -infinity as n approaches infinity then $\Phi$ goes to 0
+\\
+Then, the overall limit is equal to 1.
+\\
+\\
+Now, consider the restricted version.
+$$\lim\limits_{n \rightarrow \infty} P_R(|t| \leq с_n) = \lim\limits_{n \rightarrow \infty} [\Phi(n^{\frac{1}{3}}) - \Phi(-n^{\frac{1}{3}})] = 1 - 0 = 1$$
+As we can see, consistency is preserved here as both limits tend to 1.
+\\
+\\
+
+
+\\
+\\
+Notice that we will not get consistency here by observing the fact that $\frac{2}{3} > \frac{1}{2}$ \\
+Hence, $n^{\frac{2}{3}} - \sqrt{n}\frac{\beta}{\sigma}$ goes to infinity as n approaches infinity then $\Phi$ goes to 1
+\\
+Hence, -$n^{\frac{2}{3}} - \sqrt{n}\frac{\beta}{\sigma}$ goes to -infinity as n approaches infinity then $\Phi$ goes to 0
+The overall limit (see its formula before this sub-task) is equal to 0.
+\\
+\\
+
+
+\\
+\\
+Finally, one can notice the general rule that $n^{p}$ tends to infinity faster than $\sqrt{n}$ if p$ > \frac{1}{2}$. \\Then, we would obtain $\Phi(n^{p} - \sqrt{n}\frac{\beta}{\sigma}) \rightarrow 1$ and  $\Phi(-n^{p} - \sqrt{n}\frac{\beta}{\sigma}) \rightarrow 0$. Again, the overall limit in the unrestricted version is going to be 0. \\
+Hence, $p$ must be $ < \frac{1}{2}$. \\
+But we also have to consider negative values. Say, $p < 0$
+\\
+Then, the restricted version: $\Phi(n^p) \rightarrow 0.5$ as $n^p \rightarrow 0, p < 0$. Hence, by the formula of the restricted version $\lim\limits_{n \rightarrow \infty} [\Phi(n^p) - \Phi(-n^p$)] = 0
+
+Therefore, $0 < p < \frac{1}{2}$
+
+
+# Problem 4: OLS (Medium Difficulty)
+
+* In this problem you will study what happens if instead of micro - data you are given some aggregated data;
+
+* Data comes from 100 cities, in each city (j) the data is generated in the following way:
+
+$$
+Y_{ji} = \beta_0 + \beta_1 x_{ji} + \epsilon_{ji} \\
+\mathbb{E}[\epsilon_{ji}|x_{ji}] = 0 \\
+\mathbb{E}[\epsilon_{ji}^2] = \sigma^2  \\
+$$
+$(X_{ji},Y_{ji})$ i.i.d across observations and across cities.
+
+* The population of each city ($n_j$) equals:
+$$
+j = 1, \dots, 100 \\
+n_j = j
+$$
+
+* Instead of observing micro data $(X_{ji},Y_{ji})$ you observe averages:
+$$
+\bar{x}_{j} = \frac{1}{n_j}\sum_{i=1}^{n_j}x_{ji} \\
+\bar{y}_{j} = \frac{1}{n_j}\sum_{i=1}^{n_j}y_{ji} \\
+$$
+
+* You run a regression of $Y_{j}$ on $X_{j}$ and obtain an OLS estimator of the slope coefficient, $\hat{\beta}_1$.
+
+**Questions:**
+
+1. Prove that $\hat{\beta}_1$ is a consistent estimator of $\beta_1$;
+
+$$
+Your \, solution \, comes \, here;
+$$
+$$\hat{\beta_{1}}=\beta_{1} + \frac{\sum_{i=1}{n} (X_i - \bar{X})\epsilon_i}{\sum_{i=1}^{n} (X_i-\bar{X})^2}$$
+$\hat{\beta_{1}}$ is consistent iff $\hat{\beta_{1}} \rightarrow \beta_{1}$
+$$p\lim{\hat{\beta_{1}}} = p\lim{\beta_{1}} + p\lim{\frac{\sum_{i=1}^[n](X_ji-\bar(X_ji)\epsilon_ji)}{\sum_{i=1}^{n} (X_ji - \bar{X_j})}}= \beta_{1} + p\lim{\frac{\sum_{i=1}^[n](X_ji-\bar(X_ji)\epsilon_ji)}{\sum_{i=1}^{n} (X_ji - \bar{X_j})}}= \beta_{1} + 0 =\beta_{1}$$
+$$\frac{\sum_{i=1}^[n](X_ji-\bar(X_ji)\epsilon_ji)}{n} = \frac{\sum_{i=1}^{n} X_i \epsilon_i}{n} - \frac{\sum_{i=1}^{n} \bar{X} \epsilon_i}{n} = 0 - 0 = 0$$
+Transform $X$ to $\ln X$
+$$(\sum_{i=1}^{n} \ln (X_ji) - \frac{\bar{X}}{n})\epsilon_ji = \frac{\sum_{i=1}^{n} \ln (X_i)\epsilon_i}{n} - \frac{\sum_{i=1}^{n} \bar{X}\epsilon_i}{n}$$, $$\bar{X} = \frac{\sum_{i=1}^{n} \ln (X_ji)}{n}$$
+CMP: given infinite sequence ${X_ji}$, let $X_n \rightarrow a$ Take random variable $X_ji$. Then $\frac{\sum_{i=1}^{n} X_ji \epsilon_ji}{n} \rightarrow \mathbb{E}(X_ji \epsilon_ji)$
+ (1) $\ln (X_ji) \rightarrow$ continuous transformation? Yes, but given $X-ji$ > 0.
+ (2)$\sum_{i=1}^{n} \ln (X_ji) \rightarrow$ continuous transformation? Yes.
+ (3) $\sum_{i=1}^{n} \ln (X_ji)\epsilon_i \rightarrow$ continuous transformation? Yes.
+ Then $\frac{\sum_{i=1}^{n} \ln (X_ji)\epsilon_i}{n} \rightarrow \mathbb{E}(\ln (X_ji)\epsilon_i)= \mathrm{Cov}(\ln(X), \epsilon) + \mathbb{E} (\ln (X)) \mathbb{E} (\epsilon) = 0 + 0 = 0$
+ Since X and $\epsilon$ are independent, then the monotonic transformation of X, that is,   $\ln (X)$, is also independent of $\epsilon$
+ Hence, $\ln ()$ is a type of transformation that preserves consistency of $\beta_{1}$
+ 
+$$
+
+2. Calculate the conditional variance of $\hat{\beta}_1$;
+
+$$
+Your \, solution \, comes \, here;
+$$
+Denote by $\bar(X_j)$ average of each city, by $\bar{\bar{X}}$ denote average of averaged observations across all cities
+For $\hat{\beta_{1}}$ use linear plus noise representation, $\hat{\beta_{1}}=\beta + \frac{\sum_{i=1}^{n} \bar{\epsilon}(\bar{X_j}-\bar{\bar{X}})
+}{\sum_{i=1}^{n} (\bar{X_j}-\bar{\bar{X}})^2}$
+$$\mathrm{Var}(\beta + \frac{\sum_{i=1}^{n} \bar{\epsilon}(\bar{X_j}-\bar{\bar{X}})}{\sum_{i=1}^{n} (\bar{X_j}-\bar{\bar{X}})^2}|\bar{X_i})= \mathrm{Var} (\frac{\sum_{i=1}^{n} \bar{\epsilon}(\bar{X_j}-\bar{\bar{X}})}{\sum_{i=1}^{n} (\bar{X_j}-\bar{\bar{X}})^2}|\bar{X_i})= \frac{\sum_{i=1}^{n} (\bar{X_j}-\bar{\bar{X}})^2}{(\sum_{i=1}^{n} (\bar{X_j}-\bar{\bar{X}})^2)^2} \mathrm{Var}(\bar{\epsilon}|\bar{X_j})$$
+
+
+$$\mathrm{Var}(\bar{\epsilon}|\bar{X_j}) = \mathbb{E}((\bar{\epsilon} - \mathbb{E}(\bar{\epsilon}|\bar{X_j})^2)|\bar{X_j})$$
+'https://en.wikipedia.org/wiki/Conditional_variance'
+$ \mathbb{E}(\bar{\epsilon}|\bar{X_j})=\frac{\mathbb{E}(\epsilon|\bar{X_j})}{n} = \frac{0}{n} = 0$ as
+$\mathbb{E} (\epsilon_i|X_i)=0$. This means that the variables  $\epsilon$ and $\bar{X}$ are also independent in aggregated regression
+$$\mathbb{E}((\bar{\epsilon} - 0 )^2|\bar{X_j}) = \mathbb{E}(\bar{\epsilon}^2|\bar{X_j}) = =\frac{\mathbb{E}(\epsilon^2|\bar{X_j})}{n^2}$$
+By Law of Iterated Expectations, $\mathb{E}(\mathbb{E}(\epsilon^2|\bar{X_j})) = \mathbb{E}(\epsilon^2)=\sigma^2$
+$$\frac{\mathbb{E}(\epsilon^2|\bar{X_j})}{n^2}= \frac{\sum_{i=1}^{n}\sigma}{n^2}= \frac{n\sigma^2}{n^2}=\frac{\sigma^2}{n}$$
+
+Thus, $\frac{\sum_{i=1}^{n} (\bar{X_j}-\bar{\bar{X}})^2}{(\sum_{i=1}^{n} (\bar{X_j}-\bar{\bar{X}})^2)^2} \mathrm{Var}(\bar{\epsilon}|\bar{X_j})=\frac{\sigma^2}{n(\sum_{i=1}^{n} (\bar{X_j}-\bar{\bar{X}})^2)}$
+
+
+ 
+
+3. Propose a transformation of $(w_jX_j, w_jY_j)$ such that if you run an OLS regression of $w_jY_j$ on $w_jX_j$ you obtain:
+
+    1. Consistent estimator $\hat{\beta}_1^{new}$ of $\beta$;
+  
+    2. The conditional variance of $\hat{\beta}_1^{new}$ is smaller than that of $\hat{\beta}_1$ (to prove that the conditional variance of the new estimator is smaller apply the Gauss - Markov theorem).
+  
+$$
+Your \, solution \, comes \, here;
+$$
+  

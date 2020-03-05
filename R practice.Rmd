@@ -1,0 +1,463 @@
+---
+title: "Homework 1"
+output:
+  html_document:
+    df_print: paged
+---
+
+**Rules**:
+
+1. **The submission deadline is 15.10.2019, 23:59:59**. Your homework should be submitted to `dse2019hsehw1@gmail.com`. **No late submissions will be accepted**;
+
+2. Every group should submit one `.Rmd` file (you should use this file to write up your homework). Submitted file should be named: `vjacisens_ntoropov.Rmd` for the file submitted by Vitalijs Jascisens and Nikita Toropov;
+
+3. **No plagiarism**: all sources (both offline and online have to be acknowledged). Cheating on any part of the assignment results in a **grade of zero** for the entire assignment;
+
+4. All problems are equally weighted;
+
+5. We will not be checking your code. All problems have precise answers, hence only the correctness of the answer will be graded.
+
+**Name and Surname**:
+
+1. First student (academic number);
+
+2. Second student (academic number).
+
+# Problem 1: Tribonacci
+
+$T(n)$ is a Tribonacci number if the following holds:
+$$
+T(0) = 0 \\
+T(1) = 0 \\
+T(2) = 1 \\
+T(n) = T(n-3) + T(n-2) + T(n-1), n > 2
+$$ 
+**Rules:**
+
+You are allowed to use only base `R` functions. No additional libraries are allowed in this problem.
+
+**Questions:**
+
+1. Write a function `Tribonacci()`, which takes an integer value $n$ as an input and returns $n^{th}$ Tribonacci number $T(n)$.
+
+```{r}
+# Your code goes here:
+Tribonacci<-function(n)
+{
+  tn<-c(0, 0, 1)
+  if (n <= 2)
+    {
+      if (n == 0)
+        return (tn[1])
+      if (n == 1)
+        return (tn[2])
+      if (n == 2)
+        return (tn[3])
+    } 
+  else
+    { 
+      # for n>2
+      for (i in 3:n)
+        {
+          tn[i + 1] <- tn[i] + tn[i - 1] + tn[i - 2]
+        }
+      return (tn[n + 1])
+    }
+}
+```
+
+2. Write a function `inverse_Tribonacci()`, which takes as input any integer `t` and returns minimal `n` such that `T(n) = t` (if such `n` exists) and `False` otherwise.
+
+```{r}
+# Your code goes here:
+inverse_Tribonacci<-function(t)
+{
+  n <- 0
+  while (Tribonacci(n) < t)
+    n <- n + 1
+  if (Tribonacci(n) == t)
+    return (n)
+  else 
+    return (FALSE)
+}
+```
+
+# Problem 2: data.table and Plots
+
+You will perform an exploratory analysis of the `Airbnb` dataset for the Rome. This dataset consists of the following two tables:
+
+* `listings.csv` - Detailed listings data for the city;
+
+<!-- showing 96 atttributes for each of the listings. Some of the attributes used in the analysis are `price` (continuous), `longitude` (continuous), `latitude` (continuous), `listing_type` (categorical), `is_superhost` (categorical), `neighbourhood` (categorical), `ratings` (continuous) among others. -->
+
+* `calendar.csv` - Detailed calendar data  for listings.
+
+<!-- Provides details about booking for the next year by listing. Four attributes in total including `listing_id` (discrete), `date` (datetime), `available` (categorical) and `price` (continuous). -->
+
+See [AirBnb website](http://insideairbnb.com/get-the-data.html)  for more details. 
+
+**Rules:**
+
+You are allowed to use only base `R` functions and functions coming from the `data.table` package.
+
+**Questions:**
+
+1. Read both tables.
+
+```{r}
+# Your code goes here:
+#Clear everything and load the needed libraries:
+rm(list=ls())
+library(data.table)
+
+#Define your working directory here:
+work_dir<-'/Users/Dell/Desktop/R'
+
+#Set the working directory:
+setwd(work_dir)
+
+#Read the data:
+listings<-unzip('listings.csv.zip')
+listings<-fread('listings.csv')
+calendar<-unzip('calendar.csv.zip')
+calendar<-fread('calendar.csv')
+```
+
+2. From the dataset `listings` extract variables `id` and `host_name`. Call the resulting dataset `listing_sub`. From the dataset `calendar` extract variables `listing_id`, `price` and `date`. Call the resulting dataset `calendar_sub`. In the dataset `calendar_sub` rename the variable `listing_id` to `id`.
+
+```{r}
+# Your code goes here:
+#Subset the data:
+calendar$price<-substr(calendar$price, 2, nchar(calendar$price))
+listing_sub<-listings[,.(id, host_name)]
+calendar_sub<-calendar[,.(listing_id, price, date)]
+#Rename the variable in calendar_sub
+names(calendar_sub)[1]<-c('id')
+```
+
+3. Merge `listing_sub` and `calendar_sub` using identifier `id` (notice, for one `id` there will be multiple observations). Call the resulting dataset `prices`. In the remaining part of this problem you will calculate some group statistics for the dataset `prices`.
+
+```{r}
+# Your code goes here:
+prices<-merge(listing_sub, calendar_sub, by='id') 
+```
+
+4. Add a column `average_price` to the dataset `prices` --- average price for a given listing over the whole period.
+
+```{r}
+# Your code goes here:
+prices$price<-gsub(',','',prices$price)
+prices$price<-as.numeric(prices$price)
+prices[,average_price:=lapply(.SD, mean),.SDcols=c('price'), by=c('id')]
+```
+
+5. Add a column `season` --- time of the year. Seasons should be labelled as follows:
+
+  * Winter: December, January, February;
+  
+  * Spring: March, April, May;
+  
+  * Summer: June, July, August;
+  
+  * Autumn: September, October, November.
+  
+```{r}
+# Your code goes here:
+internal<-function(y){
+  if (y %in% c('07','06','08')){
+    c('Summer')
+  } else{
+    if (y %in% c('01','02','12')){
+      c('Winter')
+    } else{
+      if (y %in% c('03','04','05')){
+        c('Spring')
+      } else{
+        if (y %in% c('09','10','11')){
+          c('Autumn')
+        }
+      }
+    }
+  }
+}
+prices$date<-substr(prices$date,6,7)
+prices[,season:=apply(prices[,4,drop=F],1,internal)] #https://stackoverflow.com/questions/11936339/
+#replace-specific-characters-within-strings
+```
+
+6. Build two bar plots:
+* Showing total number of listing per season;
+* Showing *unique* number of listings in each season.
+
+```{r}
+# Your code goes here:
+list_seas<-table(prices$season)
+list_seas
+barplot(list_seas, main='listings per season',names.arg = c('Autumn','Spring','Summer','Winter'),ylab='listings',ylim = c(2850000,2900000))
+#
+un_list<-table(unique(prices$id), prices[unique(prices$id),season])
+res<-colSums(un_list)
+barplot(res, main='unique listings per season', ylab='unique listings', ylim=c(2600,2900))
+```
+
+# Problem 3: Monte Carlo Integration
+
+**Rules:**
+
+You are allowed to use only base `R` functions.
+
+**Questions:**
+
+1. It is well known, that the cdf of a standard normal random variable cannot be expressed in terms of elementary functions. One uses numerical methods to obtain the cdf. R provides us with a function **pnorm**, which computes a high quality approximation. Use it to compute the probability $P(Z \in (1, 2))$, where $Z$ is a standard normal random variable.
+
+```{r}
+pnorm(2) - pnorm(1)
+```
+
+2. Next, we turn to constructing our own approximations. It is based on the Monte Carlo integration. To implement it in the simplest case, let us consider a random variable $X \sim Unif(a,b)$ and observe that $E\left[f(X)\right] = \frac{1}{b-a}\int_a^bf(x)dx$. This holds for any $f(x)$ (subject to certain regularity conditions). In particular it holds for $\phi(x) = \frac{1}{\sqrt{2\pi}}e^{-\frac{x^2}{2}}$ which as you know is the probability density function of a standard normal random variable. Thus, for $t_2\geqslant t_1$, we can write, $\Phi(t_2)-\Phi(t_1) = (t_2 - t_1)E\left[\phi(X)\right]$, where $\Phi(x)$ is the cdf of a standard normal random variable and $\phi(x)$ is the density function of a standard normal random variable. Generate a random sample from $Unif(a,b)$ of size $10000$, estimate $E\left[\phi(X)\right]$ with a sample mean and compute an approximation to $P(Z \in (1, 2))$.
+
+```{r} 
+# This subtask and future ones are based upon these sources:
+# http://www2.math.umd.edu/~bnk//STAT705/monteCarlo.11.pdf
+# http://nano.ivanovo.ac.ru/pdfs/2010_7_01_12_56_38_monte-carlo.pdf
+set.seed(10) #
+a = 1
+b = 2
+n = 10000
+X <- runif(n,a,b)
+phi <- function(X) {exp(-X^2 / 2) / sqrt(2 * pi)}
+Int = (sum(phi(X)) / n) * (b - a)
+Int
+```
+  
+3. Write a function, that will compute an approximation of $P(Z \in (t_1, t_2))$ based on a sample of size $n$, where $t_1$, $t_2$ and $n$ should be passed to the function as parameters. Use it to approximate $P(Z \in (-3, -1))$.
+
+```{r}
+set.seed(10)
+# Your code goes here:
+f <- function(t1, t2, n)
+{
+    X <- runif(n, t1, t2)
+    Y <- exp(-X^2 / 2) / sqrt(2 * pi)
+    Int = (sum(Y) / n) * (t2 - t1)
+    return (Int)
+}
+f(-3,-1,10000)
+```
+  
+4. Generalize the function above, so that it can be used to compute an integral of an arbitrary function over a bounded interval, where the function in question should be passed as one of the parameters. Use it to compute $P(Y \in (1, 2))$, where $Y \sim Exp(\lambda = 2)$, i.e., the density function of $Y$ is given by: $f(y)=2e^{-2y}$.
+
+```{r}
+set.seed(10)
+# Your code goes here:
+
+f1 <- function(g, t1, t2, n)
+{
+  X <- runif(n, t1, t2)
+  Y = (2 * exp(-2 * X))
+  Int = (sum(g(X))/n) * (t2 - t1)
+  return (Int)
+}
+
+g <- function(x) {(2 * exp(-2 * x))}
+
+f1(g, 1, 2, 10000)
+```
+
+5. The method above can not be used to compute $\Phi(t)$ itself, because it utilizes uniform distribution on a bounded interval. However, suppose that we chose some other $X$, that is distributed on $\mathbb{R^+}$ with density $f_X(t)$. It can be easily verified that $E\left[\frac{\phi(X)}{f(X)}|X > t\right] = \frac{1}{P(X > t)}(1-\Phi(t)), \forall t \geqslant 0$. Use this observation and symmetry of a normal distribution around $0$ to create a function that approximates $\Phi(t), \forall t \in \mathbb{R}$. Use $X\sim Exp(\lambda=0.5)$, i.e. $f(x)=\frac{1}{2}e^{-\frac{1}{2}x}$. Compute $\Phi(1.96)$ and $\Phi(-1.96)$ using the function.
+
+```{r}
+set.seed(10)
+calc_prob <- function(t)
+{
+  negative = FALSE
+  if (t <= 0)
+  {
+    t = t * (-1)
+    negative = TRUE
+  }
+  n = 10000
+  phi <- function(x) {exp(-X^2/2) / sqrt(2 * pi)}
+  f2 <- function(x) {0.5 * exp(-0.5 * x)}
+  X <- rexp(n, 0.5)
+  X <- X[X >= t]
+  #Int <- 1 - sum(phi(X) / f2(X))/length(X)*(1 - integrate(f2, 0, t)$value)
+  # but approximate 1 - inte
+  Int <- 1 - sum(phi(X) / f2(X))/length(X) * (1 - f1(f2, 0, t, n))
+  if (negative)
+    Int = 1 - Int
+  return (Int)
+}
+p_approx = calc_prob(1.96) - calc_prob(-1.96)
+p_approx
+```
+
+# Problem 4: More data.table
+
+In this problem you will work with `households.csv` dataset. In this dataset you have following variables:
+
+  * `h_id`: household indicator;
+  
+  * `p_id`: person id;
+  
+  * `m_id`: the id of a person's mother.
+  
+**Rules:**
+
+In this question you are not allowed to use loops (neither in functions nor explicitly in your code).
+  
+**Questions:**
+
+  1. Calculate the mean number of mothers per household;
+  
+```{r}
+# Your code goes here:
+work_dir<-'/Users/Dell/Desktop/R'
+setwd(work_dir)
+file<-fread('households.csv')
+mums<-unique(file$m_id)
+mums<-mums[!is.na(mums)]
+mums_number<-length(mums)
+houses_number<-length(unique(file$h_id))
+mum_per_household<-mums_number/houses_number
+mum_per_household
+
+```
+
+  
+  2. Calculate the mean number of children per mother;
+  
+```{r}
+# Your code goes here:
+with_mothers<-file[!is.na(file$m_id)]
+children_number<-length(with_mothers$p_id)
+child_per_mum<-children_number/mums_number
+child_per_mum
+
+```
+
+  
+  3. Calculate the number of households where all the conditions hold:
+    
+    1. There is a p_id (let's call her i) who has children;
+    
+    2. The same i lives together with her parent (let's call her j);
+    
+    3. The parent of a j also lives within the same household as i and j.
+
+
+```{r}
+# Your code goes here:
+#learnt about match() from https://stackoverflow.com/questions/12697122/in-r-match-function-for-rows-or-columns-of-matrix
+parents<-unique(file$m_id[!is.na(file$m_id)])
+parents2<-file$m_id[match(parents,file$p_id)]
+par_par2<-as.data.frame(cbind(parents,parents2))
+par_par2<-par_par2[is.na(par_par2$parents2)==F,]
+parents<-par_par2[,1]
+parents2<-par_par2[,2]
+par_h<-file$h_id[match(parents,file$p_id)]
+par_h2<-file$h_id[match(parents2,file$p_id)]
+log<-par_h==par_h2
+log<-as.data.frame(log)
+par_par2<-cbind(par_par2,log, par_h, par_h2)
+par_par2<-par_par2[par_par2$log==T,]
+parents3<-file$m_id[match(par_par2$parents2,file$p_id)]
+par_par2<-cbind(par_par2,parents3)
+par_par2<-par_par2[is.na(par_par2$parents3)==F,]
+par_h3<-file$h_id[match(par_par2$parents3,file$p_id)]
+log2<-par_h3==par_par2$par_h
+par_par2<-cbind(par_par2,log2)
+par_par2<-par_par2[par_par2$log2==T,]
+houses<-unique(par_par2$par_h2)
+result<-length(houses)
+result
+
+```
+
+
+# Problem 5: XML
+
+Folder `DATA_HW_1_PROCUREMENT` contains `.zip` archives with information on Russian public procurement. 
+
+**Rules:**
+
+In this question you are allowed to use base `R` functions, functions coming from the `xml2` package and functions coming from the `data.table` package.
+
+**Question:**
+
+Below you are given the screenshot of a typical `.xml` file within an archive (the name of an `xml` file is `fcsProtocolPR_0376300000114000230_4378.xml`, it is located within `protocol_Adygeja_Resp_2014060100_2014070100_001.xml.zip`). 
+<center>
+ ![Screenshot of an XML file.](/Users/vitalijs/Dropbox/TEACHING/DSE_2019_2020/Homeworks/HW1/screen_procurement.png)
+</center>
+
+You are asked to write a function, `function_process_xml`, which given the name of the archive an the name of the file, does the following (expected output is provided in the screenshot below):
+  
+  0. You are not allowed to unzip the archive, the processing should happen on the go;
+
+  1. If the tag name of the `.xml` file does not equal `fcsProtocolEF1`, it gives out `NA`;
+  
+  2. If the tag name of the `.xml` file equals `fcsProtocolEF1` it extracts:
+    
+    1. `journalNumber`: value given in the file;
+    
+    2. `appDate`: value given in the file;
+    
+    3. `admitted`: if the attribute is not missing, then it should return `true`, else it should return `false`;
+    
+    4. `archive_name`: name of the .zip archive;
+    
+    5. `file_name`: name of the file.
+
+```{r}
+# Your code goes here:
+
+# based on https://r.789695.n4.nabble.com/How-to-download-and-unzip-data-in-a-loop-td4702813.html
+
+library(xml2)
+library(data.table)
+function_process_xml <- function(xml_file_name, zip_name)
+{
+  if ((strsplit(xml_file_name, '_')[[1]][1] != "fcsProtocolEF1") == TRUE)
+    return (NA)
+  td = tempdir()
+  unzip(zip_name, exdir = td)
+  path_file = file.path(td, xml_file_name)
+  fil = read_html(path_file) # https://www.rdocumentation.org/packages/xml2/versions/1.2.2
+  journalNumber<-list()
+  appDate<-list()
+  admitted<-list()
+  app<-xml_find_all(fil,'.//application')
+  if (length(app)!=0){
+    for (u in 1:length(app)){
+      journalNumber[[u]]<-xml_text(xml_find_all(app[[u]],'.//journalnumber'))
+      appDate[[u]]<-xml_text(xml_find_all(app[[u]],'.//appdate'))
+      if (length(xml_find_all(app[[u]],'.//admitted'))==0){
+        admitted[[u]]<-'false'
+      } else{
+        admitted[[u]]<-'true'
+      }
+    }
+  
+    admitted<-unlist(admitted)
+    journalNumber<-unlist(journalNumber)
+    appDate<-unlist(appDate)
+    fin<-cbind(journalNumber,appDate,admitted)
+    final<-as.data.table(fin)
+    final[,archive_name:=zip_name]
+    final[,file_name:=xml_file_name]   
+    return (data.table(final))
+  }
+}
+
+function_process_xml("fcsProtocolPR_0376300000114000230_4378.xml","protocol_Adygeja_Resp_2014060100_2014070100_001.xml.zip")
+
+```
+<center>
+ ![Screenshot of an XML file.](/Users/vitalijs/Dropbox/TEACHING/DSE_2019_2020/Homeworks/HW1/screen_result.png)
+</center>
+
+
+
+
+
+
